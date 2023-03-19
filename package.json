@@ -2,8 +2,16 @@
     "name": "vite-plugin-react-simg",
     "version": "1.0.0",
     "keywords": [
-        "vite-plugin"
+        "vite-plugin",
+        "vite",
+        "image",
+        "react",
+        "sharp"
     ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/waaverecords/vite-plugin-react-simg.git"
+    },
     "main": "dist/index.js",
     "files": [
         "dist/**/*"
