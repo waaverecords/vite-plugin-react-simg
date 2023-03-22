@@ -1,7 +1,7 @@
 import { PluginOption } from 'vite';
 import { parse } from '@babel/parser';
 import traverse from '@babel/traverse';
-import { JSXElement, JSXIdentifier, isJSXAttribute, JSXAttribute, isStringLiteral, StringLiteral, jsxAttribute, jsxExpressionContainer, jsxIdentifier, numericLiteral, stringLiteral } from '@babel/types';
+import { JSXElement, JSXIdentifier, isJSXAttribute, JSXAttribute, isStringLiteral, StringLiteral, jsxAttribute, jsxExpressionContainer, jsxIdentifier, numericLiteral, stringLiteral, NumericLiteral, JSXExpressionContainer } from '@babel/types';
 import path from 'path';
 import fs from 'fs';
 import fetch from 'node-fetch';
@@ -52,43 +52,59 @@ export default function simg(): PluginOption {
                 const imageName = path.basename(src).split('.')[0];
                 const imageExt = path.extname(src.split('?')[0]);
 
-                const folderPath = path.join(__dirname, 'public', 'Simg', imageName);
+                const folderPath = path.join(__dirname, 'public', 'simg', imageName);
                 if (!fs.existsSync(folderPath))
                     fs.mkdirSync(folderPath, { recursive: true });
 
                 const filePath = path.join(folderPath, `${imageName}${imageExt}`);
+                var webUrl = `/simg/${imageName}/${imageName}${imageExt}`;
 
                 // TODO: caching mechanism
                 const response = await fetch(src);
                 const dest = fs.createWriteStream(filePath);
                 response.body?.pipe(dest);
 
-                const webUrl = `/Simg/${imageName}/${imageName}${imageExt}`;
-                srcLiteral.value = webUrl;
+                var widthAttribute = attributes.find(x => isJSXAttribute(x) && x.name.name === 'width') as JSXAttribute | undefined;
+                if (!widthAttribute)
+                    attributes.push(jsxAttribute(
+                        jsxIdentifier('height'),
+                        jsxExpressionContainer(numericLiteral(0))
+                    ));
+                const widthLiteral = (widthAttribute!.value as JSXExpressionContainer).expression as NumericLiteral;
+                var sWidth = widthLiteral.value;
+
+                var heightAttribute = attributes.find(x => isJSXAttribute(x) && x.name.name === 'height') as JSXAttribute | undefined;
+                if (!heightAttribute)
+                    attributes.push(jsxAttribute(
+                        jsxIdentifier('height'),
+                        jsxExpressionContainer(numericLiteral(0))
+                    ));
+                const heightLiteral = (heightAttribute!.value as JSXExpressionContainer).expression as NumericLiteral;
+                var sHeight = heightLiteral.value;
 
                 const image = sharp(filePath);
                 // TODO: caching mechanism
-                // TODO: promise.all
-                const { width, height } = await image.metadata();
-                const { dominant } = await image.stats();
                 // TODO: generate smaller image versions with modes (blurry, fractal, gradient, ...)
 
-                if (width) {
-                    const widthAttribute = jsxAttribute(
-                        jsxIdentifier('width'),
-                        jsxExpressionContainer(numericLiteral(width))
-                    );
-                    attributes.push(widthAttribute);
-                }
+                if (sWidth || sHeight) {
 
-                if (height) {
-                    const heightAttribute = jsxAttribute(
-                        jsxIdentifier('height'),
-                        jsxExpressionContainer(numericLiteral(height))
-                    );
-                    attributes.push(heightAttribute);
+                    if (!!sWidth !== !!sHeight) {
+                        const { width, height } = await image.metadata();
+                        if (!width && !height) continue;
+    
+                        if (sWidth) sHeight = height! * sWidth / width!;
+                        else sWidth = width! * sHeight / height!;
+    
+                        widthLiteral.value = sWidth;
+                        heightLiteral.value = sHeight;
+                    }
+                    
+                    // TODO: save image with new dimensions and new name
+                    webUrl = `/simg/${imageName}/${imageName}-${sWidth || ''}x${sHeight || ''}${imageExt}`;
                 }
+                srcLiteral.value = webUrl;
 
+                const { dominant } = await image.stats();
                 const colorAttribute = jsxAttribute(
                     jsxIdentifier('color'),
                     jsxExpressionContainer(stringLiteral(`rgb(${dominant.r}, ${dominant.g}, ${dominant.b})`))
